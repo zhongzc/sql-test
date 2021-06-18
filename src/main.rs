@@ -3,7 +3,6 @@ mod monitor;
 use crate::monitor::Monitor;
 
 use std::iter;
-use std::time::Instant;
 
 use mysql::prelude::*;
 use mysql::*;
@@ -17,13 +16,101 @@ fn main() {
     let monitor = Monitor::start_monitoring(1000);
 
     println!("CREATING TABLES...");
-    create_tables(10000, 10, &pool, &monitor);
+    create_tables(100, 1, &pool, &monitor);
 
-    println!("INSERTING TUPLES...");
-    insert_tuples(10000, 10, 1000, &pool, &monitor);
+    // println!("INSERTING TUPLES...");
+    // insert_tuples(100, 10, 1000, &pool, &monitor);
+    //
+    // println!("QUERYING...");
+    // random_query(100, 10, 1000, &pool, &monitor);
 
-    println!("QUERYING...");
-    random_query(10000, 10, 1000, &pool, &monitor);
+    // insert_in_multi_statments(100, &pool, &monitor);
+    insert_in_batch(100, &pool, &monitor);
+}
+
+fn insert_in_multi_statments(table_count: usize, pool: &Pool, monitor: &Monitor) {
+    (0..10)
+        .map(|_| {
+            let mut conn = pool.get_conn().unwrap();
+            let monitor = monitor.clone();
+            std::thread::spawn(move || {
+                let mut rand = rand::thread_rng();
+                loop {
+                    let _g = monitor.exec_once();
+
+                    let table_id = rand.gen_range(0, table_count);
+                    let mut sql = String::new();
+                    sql.push_str("BEGIN /*T! OPTIMISTIC */;");
+                    (0..100)
+                        .map(|_| {
+                            let num = rand.gen::<i32>();
+                            let text_len = rand.gen_range(5, 20);
+                            let text = iter::repeat(())
+                                .map(|()| rand.sample(Alphanumeric))
+                                .take(text_len)
+                                .collect::<String>();
+                            (num, text)
+                        })
+                        .for_each(|(num, text)| {
+                            sql.push_str(&format!(
+                                "INSERT INTO t_{} (b, c) VALUES ({}, '{}');",
+                                table_id, num, text
+                            ));
+                        });
+                    sql.push_str("COMMIT;");
+
+                    conn.query_drop(sql).unwrap();
+                }
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|thread| thread.join().unwrap());
+}
+
+fn insert_in_batch(table_count: usize, pool: &Pool, monitor: &Monitor) {
+    (0..10)
+        .map(|_| {
+            let mut conn = pool.get_conn().unwrap();
+            let monitor = monitor.clone();
+            std::thread::spawn(move || {
+                let mut rand = rand::thread_rng();
+                loop {
+                    let _g = monitor.exec_once();
+
+                    let mut sql = String::new();
+                    sql.push_str(&format!(
+                        "INSERT INTO t_{} (b, c) VALUES ",
+                        rand.gen_range(0, table_count)
+                    ));
+                    (0..99)
+                        .map(|_| {
+                            let num = rand.gen::<i32>();
+                            let text_len = rand.gen_range(5, 20);
+                            let text = iter::repeat(())
+                                .map(|()| rand.sample(Alphanumeric))
+                                .take(text_len)
+                                .collect::<String>();
+                            (num, text)
+                        })
+                        .for_each(|(num, text)| {
+                            sql.push_str(&format!("({}, '{}'),", num, text));
+                        });
+                    let num = rand.gen::<i32>();
+                    let text_len = rand.gen_range(5, 20);
+                    let text = iter::repeat(())
+                        .map(|()| rand.sample(Alphanumeric))
+                        .take(text_len)
+                        .collect::<String>();
+                    sql.push_str(&format!("({}, '{}');", num, text));
+
+                    conn.query_drop(sql).unwrap();
+                }
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .for_each(|thread| thread.join().unwrap());
 }
 
 fn create_tables(count: usize, parallel: usize, pool: &Pool, monitor: &Monitor) {
@@ -34,10 +121,8 @@ fn create_tables(count: usize, parallel: usize, pool: &Pool, monitor: &Monitor) 
         let chunk = Vec::from(chunk);
         std::thread::spawn(move || {
             for i in chunk {
-                monitor.incr_count(1);
-                let timer = Instant::now();
-                conn.exec_drop(format!("CREATE TABLE IF NOT EXISTS t_{} (a int auto_increment, b int, c varchar(100), primary key (a));", i), ()).unwrap();
-                monitor.add_response_time(timer.elapsed());
+                let _g = monitor.exec_once();
+                conn.query_drop(format!("CREATE TABLE IF NOT EXISTS t_{} (a int auto_increment, b int, c varchar(100), primary key (a));", i)).unwrap();
             }
         })
     }).collect::<Vec<_>>().into_iter().for_each(|thread| thread.join().unwrap());
@@ -61,34 +146,28 @@ fn insert_tuples(
             let pool = pool.clone();
             std::thread::spawn(move || {
                 let mut rand = rand::thread_rng();
+
+                // Insert 100 tuples in a batch
                 chunk.chunks(100).for_each(|chunk| {
                     let mut txn = pool.start_transaction(Default::default()).unwrap();
                     chunk.iter().for_each(|(table_id, _)| {
-                        let timer = Instant::now();
-                        monitor.incr_count(1);
+                        let _g = monitor.exec_once();
 
-                        let str_count = rand.gen_range(5, 20);
-                        txn.exec_drop(
-                            &format!(
-                                "INSERT INTO t_{} (b, c) VALUES ({}, '{}')",
-                                table_id,
-                                rand.gen::<i32>(),
-                                iter::repeat(())
-                                    .map(|()| rand.sample(Alphanumeric))
-                                    .take(str_count)
-                                    .collect::<String>()
-                            ),
-                            (),
-                        )
+                        let text_len = rand.gen_range(5, 20);
+                        txn.query_drop(&format!(
+                            "INSERT INTO t_{} (b, c) VALUES ({}, '{}')",
+                            table_id,
+                            rand.gen::<i32>(),
+                            iter::repeat(())
+                                .map(|()| rand.sample(Alphanumeric))
+                                .take(text_len)
+                                .collect::<String>()
+                        ))
                         .unwrap();
-
-                        monitor.add_response_time(timer.elapsed());
                     });
 
-                    let timer = Instant::now();
-                    monitor.incr_count(1);
+                    let _g = monitor.exec_once();
                     txn.commit().unwrap();
-                    monitor.add_response_time(timer.elapsed());
                 });
             })
         })
@@ -111,15 +190,13 @@ fn random_query(
             std::thread::spawn(move || {
                 let mut rand = rand::thread_rng();
                 loop {
-                    let timer = Instant::now();
-                    monitor.incr_count(1);
+                    let _g = monitor.exec_once();
                     conn.query_drop(format!(
                         "SELECT * FROM t_{} WHERE a = {}",
                         rand.gen_range(0, table_count),
                         rand.gen_range(1, tuple_count_per_table + 1)
                     ))
                     .unwrap();
-                    monitor.add_response_time(timer.elapsed());
                 }
             })
         })

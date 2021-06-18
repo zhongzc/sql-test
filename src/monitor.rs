@@ -73,4 +73,23 @@ impl Monitor {
     pub fn add_response_time(&self, duration: Duration) {
         let _ = self.duration_tx.send((duration, 1));
     }
+
+    pub fn exec_once(&self) -> Guard {
+        self.incr_count(1);
+        Guard {
+            monitor: self,
+            start: Instant::now(),
+        }
+    }
+}
+
+pub struct Guard<'a> {
+    monitor: &'a Monitor,
+    start: Instant,
+}
+
+impl<'a> Drop for Guard<'a> {
+    fn drop(&mut self) {
+        self.monitor.add_response_time(self.start.elapsed());
+    }
 }
