@@ -2,7 +2,6 @@ import com.twitter.util.Future
 import org.HdrHistogram.Histogram
 import org.slf4j.LoggerFactory
 
-import java.time.LocalDateTime
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.{LinkedTransferQueue, TimeUnit}
 
@@ -53,7 +52,7 @@ object Monitor {
             val stddev = histogram.getStdDeviation / 1000000
 
             logger.info(
-              f"[${LocalDateTime.now()}] QPS: $qps%.2f | Latency (ms): p50 $p50%.2f, p90 $p90%.2f, p99 $p99%.2f, p999 $p999%.2f, Min $min%.2f, Avg $avg%.2f, Max $max%.2f, Stddev $stddev%.2f"
+              f"QPS: $qps%.2f | Latency (ms): p50 $p50%.2f, p90 $p90%.2f, p99 $p99%.2f, p999 $p999%.2f, Min $min%.2f, Avg $avg%.2f, Max $max%.2f, Stddev $stddev%.2f"
             )
 
             lastCount = count
