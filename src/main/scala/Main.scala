@@ -3,24 +3,28 @@ import com.twitter.finagle.mysql.Client
 import com.twitter.util.{Await, Future}
 
 object Main extends App {
-  import Monitor.MonitoredFuture
-
-  val client = Mysql.client
-    .withCredentials("root", null)
-    .withDatabase("test")
-    .newRichClient("localhost:4000")
-
   val monitor = Monitor.startMonitoring(5000)
-  Await.result(
-    for {
-      _ <- createTables(client, monitor, 100, 1)
 
-    // _ <- other steps...
-    } yield ()
-  )
-  monitor.stop()
+  try {
+    val client = Mysql.client
+      .withCredentials("root", null)
+      .withDatabase("test")
+      .newRichClient("localhost:4000")
+
+    Await.result(
+      for {
+        _ <- createTables(client, monitor, 100, 1)
+
+     // _ <- other steps...
+      } yield ()
+    )
+  } finally {
+    monitor.stop()
+  }
 
   def createTables(client: Client, monitor: Monitor, count: Int, parallel: Int): Future[()] = {
+    import Monitor.MonitoredFuture
+
     Future.collect(
       (1 to count)
         .grouped(count / parallel)
