@@ -14,6 +14,8 @@ object Main extends App {
   Await.result(
     for {
       _ <- createTables(client, monitor, 100, 1)
+
+    // _ <- other steps...
     } yield ()
   )
   monitor.stop()
