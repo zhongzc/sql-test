@@ -5,6 +5,7 @@ import com.twitter.finagle.Mysql
 import com.twitter.finagle.mysql.Client
 import com.twitter.util.{Await, Future}
 import org.HdrHistogram.Histogram
+import org.slf4j.LoggerFactory
 
 object Main extends App {
   import Monitor.MonitoredFuture
@@ -14,7 +15,7 @@ object Main extends App {
     .withDatabase("test")
     .newRichClient("localhost:4000")
 
-  val monitor = Monitor.startMonitoring(1000)
+  val monitor = Monitor.startMonitoring(5000)
 
   Await.result(
     for {
@@ -74,6 +75,7 @@ object Monitor {
     val monitor = new Monitor
     val thread = new Thread {
       override def run(): Unit = {
+        val logger = LoggerFactory.getLogger(Monitor.getClass)
         val histogram = new Histogram(3600000000000L, 3)
         var now = System.currentTimeMillis()
         var nextReportTime = now + reportIntervalMillis
@@ -93,7 +95,7 @@ object Monitor {
             val max = histogram.getMaxValue.toDouble / 1000000
             val stddev = histogram.getStdDeviation / 1000000
 
-            println(f"[${LocalDateTime.now()}] QPS: $qps%.2f | Latency (ms): p50 $p50%.2f, p90 $p90%.2f, p99 $p99%.2f, p999 $p999%.2f, Min $min%.2f, Avg $avg%.2f, Max $max%.2f, Stddev $stddev%.2f")
+            logger.info(f"[${LocalDateTime.now()}] QPS: $qps%.2f | Latency (ms): p50 $p50%.2f, p90 $p90%.2f, p99 $p99%.2f, p999 $p999%.2f, Min $min%.2f, Avg $avg%.2f, Max $max%.2f, Stddev $stddev%.2f")
 
             lastCount = count
             nextReportTime = now + reportIntervalMillis

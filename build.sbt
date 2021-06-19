@@ -27,6 +27,8 @@ version := "1.0"
 
 libraryDependencies += "com.twitter" %% "finagle-mysql" % "21.5.0"
 libraryDependencies += "org.hdrhistogram" % "HdrHistogram" % "2.1.12"
+libraryDependencies += "org.slf4j" % "slf4j-api" % "1.7.31"
+libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.31"
 
 // Here, `libraryDependencies` is a set of dependencies, and by using `+=`,
 // we're adding the scala-parser-combinators dependency to the set of dependencies
