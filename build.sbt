@@ -1,4 +1,3 @@
-
 // The simplest possible sbt build file is just one line:
 
 scalaVersion := "2.13.3"
@@ -20,7 +19,6 @@ version := "1.0"
 // Note, it's not required for you to define these three settings. These are
 // mostly only necessary if you intend to publish your library's binaries on a
 // place like Sonatype or Bintray.
-
 
 // Want to use a published library in your project?
 // You can define other libraries as dependencies in your build like this:
@@ -78,3 +76,5 @@ libraryDependencies += "org.slf4j" % "slf4j-simple" % "1.7.31"
 
 // To learn more about multi-project builds, head over to the official sbt
 // documentation at http://www.scala-sbt.org/documentation.html
+
+addCommandAlias("fmt", "scalafmtAll;scalafmtSbt")
