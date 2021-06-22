@@ -74,15 +74,17 @@ object Monitor {
   }
 
   implicit class MonitoredFuture[A](future: Future[A]) {
-    def monBy(monitor: Monitor): Future[A] = {
+    def monBy(monitor: Monitor): Future[A] = future.monBy(monitor, 1)
+
+    def monBy(monitor: Monitor, count: Long): Future[A] = {
       for {
         startNanos <- {
-          monitor.incrCount(1)
+          monitor.incrCount(count)
           Future.value(System.nanoTime())
         }
         v <- future
         _ <- {
-          monitor.addResponseTime(System.nanoTime() - startNanos, 1)
+          monitor.addResponseTime(System.nanoTime() - startNanos, count)
           Future.value(())
         }
       } yield v
