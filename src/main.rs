@@ -10,22 +10,22 @@ use rand::distributions::Alphanumeric;
 use rand::prelude::*;
 
 fn main() {
-    let url = "mysql://root@localhost:4000/test";
+    let url = "mysql://root@127.0.0.1:4000/test";
 
     let pool = Pool::new(url).unwrap();
     let monitor = Monitor::start_monitoring(1000);
 
     println!("CREATING TABLES...");
-    create_tables(100, 1, &pool, &monitor);
+    create_tables(1, 1, &pool, &monitor);
 
     // println!("INSERTING TUPLES...");
     // insert_tuples(100, 10, 1000, &pool, &monitor);
     //
-    // println!("QUERYING...");
-    // random_query(100, 10, 1000, &pool, &monitor);
 
-    // insert_in_multi_statments(100, &pool, &monitor);
-    insert_in_batch(100, &pool, &monitor);
+    insert_in_batch(1, &pool, &monitor);
+
+    println!("QUERYING...");
+    random_query(1, 10, &pool, &monitor);
 }
 
 fn insert_in_multi_statments(table_count: usize, pool: &Pool, monitor: &Monitor) {
@@ -53,7 +53,7 @@ fn insert_in_multi_statments(table_count: usize, pool: &Pool, monitor: &Monitor)
                         })
                         .for_each(|(num, text)| {
                             sql.push_str(&format!(
-                                "INSERT INTO t_{} (b, c) VALUES ({}, '{}');",
+                                "INSERT INTO t_{} (a, b, c) VALUES (NULL, {}, '{}');",
                                 table_id, num, text
                             ));
                         });
@@ -69,21 +69,20 @@ fn insert_in_multi_statments(table_count: usize, pool: &Pool, monitor: &Monitor)
 }
 
 fn insert_in_batch(table_count: usize, pool: &Pool, monitor: &Monitor) {
-    (0..10)
+    (0..1000)
         .map(|_| {
             let mut conn = pool.get_conn().unwrap();
             let monitor = monitor.clone();
             std::thread::spawn(move || {
                 let mut rand = rand::thread_rng();
-                loop {
+                {
                     let _g = monitor.exec_once();
 
                     let mut sql = String::new();
                     sql.push_str(&format!(
-                        "INSERT INTO t_{} (b, c) VALUES ",
-                        rand.gen_range(0, table_count)
+                        "INSERT INTO t_0 (a, b, c) VALUES ",
                     ));
-                    (0..99)
+                    (0..199)
                         .map(|_| {
                             let num = rand.gen::<i32>();
                             let text_len = rand.gen_range(5, 20);
@@ -94,7 +93,7 @@ fn insert_in_batch(table_count: usize, pool: &Pool, monitor: &Monitor) {
                             (num, text)
                         })
                         .for_each(|(num, text)| {
-                            sql.push_str(&format!("({}, '{}'),", num, text));
+                            sql.push_str(&format!("(NULL, {}, '{}'),", num, text));
                         });
                     let num = rand.gen::<i32>();
                     let text_len = rand.gen_range(5, 20);
@@ -102,7 +101,7 @@ fn insert_in_batch(table_count: usize, pool: &Pool, monitor: &Monitor) {
                         .map(|()| rand.sample(Alphanumeric))
                         .take(text_len)
                         .collect::<String>();
-                    sql.push_str(&format!("({}, '{}');", num, text));
+                    sql.push_str(&format!("(NULL, {}, '{}');", num, text));
 
                     conn.query_drop(sql).unwrap();
                 }
@@ -123,6 +122,7 @@ fn create_tables(count: usize, parallel: usize, pool: &Pool, monitor: &Monitor) 
             for i in chunk {
                 let _g = monitor.exec_once();
                 conn.query_drop(format!("CREATE TABLE IF NOT EXISTS t_{} (a int auto_increment, b int, c varchar(100), primary key (a));", i)).unwrap();
+                println!("Table t_{} has been created", i);
             }
         })
     }).collect::<Vec<_>>().into_iter().for_each(|thread| thread.join().unwrap());
@@ -179,7 +179,6 @@ fn insert_tuples(
 fn random_query(
     table_count: usize,
     parallel: usize,
-    tuple_count_per_table: usize,
     pool: &Pool,
     monitor: &Monitor,
 ) {
@@ -192,9 +191,7 @@ fn random_query(
                 loop {
                     let _g = monitor.exec_once();
                     conn.query_drop(format!(
-                        "SELECT * FROM t_{} WHERE a = {}",
-                        rand.gen_range(0, table_count),
-                        rand.gen_range(1, tuple_count_per_table + 1)
+                        "SELECT count(*) FROM t_0",
                     ))
                     .unwrap();
                 }
